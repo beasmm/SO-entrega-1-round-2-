@@ -3,12 +3,19 @@
 #include <stdlib.h>
 #include <unistd.h>
 
+//can this b here
+
+#include <fcntl.h>
+
 #include "constants.h"
 #include "operations.h"
 #include "parser.h"
 
+
+
 int main(int argc, char *argv[]) {
   unsigned int state_access_delay_ms = STATE_ACCESS_DELAY_MS;
+  int fp = open("./jobs/test.jobs", O_RDONLY);
 
   if (argc > 1) {
     char *endptr;
@@ -35,9 +42,9 @@ int main(int argc, char *argv[]) {
     printf("> ");
     fflush(stdout);
 
-    switch (get_next(STDIN_FILENO)) {
+    switch (get_next(fp)) {
       case CMD_CREATE:
-        if (parse_create(STDIN_FILENO, &event_id, &num_rows, &num_columns) != 0) {
+        if (parse_create(fp, &event_id, &num_rows, &num_columns) != 0) {
           fprintf(stderr, "Invalid command. See HELP for usage\n");
           continue;
         }
@@ -49,7 +56,7 @@ int main(int argc, char *argv[]) {
         break;
 
       case CMD_RESERVE:
-        num_coords = parse_reserve(STDIN_FILENO, MAX_RESERVATION_SIZE, &event_id, xs, ys);
+        num_coords = parse_reserve(fp, MAX_RESERVATION_SIZE, &event_id, xs, ys);
 
         if (num_coords == 0) {
           fprintf(stderr, "Invalid command. See HELP for usage\n");
@@ -63,7 +70,7 @@ int main(int argc, char *argv[]) {
         break;
 
       case CMD_SHOW:
-        if (parse_show(STDIN_FILENO, &event_id) != 0) {
+        if (parse_show(fp, &event_id) != 0) {
           fprintf(stderr, "Invalid command. See HELP for usage\n");
           continue;
         }
@@ -82,7 +89,7 @@ int main(int argc, char *argv[]) {
         break;
 
       case CMD_WAIT:
-        if (parse_wait(STDIN_FILENO, &delay, NULL) == -1) {  // thread_id is not implemented
+        if (parse_wait(fp, &delay, NULL) == -1) {  // thread_id is not implemented
           fprintf(stderr, "Invalid command. See HELP for usage\n");
           continue;
         }
