@@ -9,13 +9,29 @@
 
 //can this b here
 
-#include <fcntl.h>
 
 #include "constants.h"
 #include "operations.h"
 #include "parser.h"
 
+FILE* read_file_from_dir(DIR* dir, char* dir_path) {
+    struct dirent* ent = readdir(dir);
+    char file_path[128];
+    memset(file_path, 0, 128);
 
+    if (ent == NULL) return NULL;
+
+    strcat(file_path, dir_path);
+    strcat(file_path, "/");
+    strcat(file_path, ent->d_name);
+
+    int fp = open(file_path, O_RDONLY);
+    if (fp == -1) {
+      fprintf(stderr, "Failed to open jobs file\n");
+      return NULL;
+    }
+    return fp;
+}
 
 int main(int argc, char *argv[]) {
   unsigned int state_access_delay_ms = STATE_ACCESS_DELAY_MS;
@@ -44,26 +60,11 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  struct dirent* ent;
-  int fp;
-
   bool not_done = true;
   while (not_done) {
-    ent = readdir(dir);
-    char file_path[128];
-    memset(file_path, 0, 128);
-
-    if (ent == NULL) break;
-    if (ent->d_name[0] == '.') continue;
-
-    strcat(file_path, dir_path);
-    strcat(file_path, "/");
-    strcat(file_path, ent->d_name);
-
-    fp = open(file_path, O_RDONLY);
-    if (fp == -1) {
+    FILE* fp = read_file_from_dir(dir, dir_path);
+    if (fp == NULL) {
       not_done = false;
-      fprintf(stderr, "Failed to open jobs file\n");
       continue;
     }
 
