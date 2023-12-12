@@ -53,8 +53,12 @@ int main(int argc, char *argv[]) {
     state_access_delay_ms = (unsigned int)delay;
   }
 
-  // int MAX_PROC = argv[1];
-  // int MAX_THREADS = argv[2];
+  int MAX_PROC = atoi(argv[1]);
+  int active_processes = 0;
+  
+  //unused, flagged in compiler (is correct though)
+  //int MAX_THREADS = atoi(argv[2]); 
+
 
   if (ems_init(state_access_delay_ms)) {
     fprintf(stderr, "Failed to initialize EMS\n");
@@ -70,6 +74,10 @@ int main(int argc, char *argv[]) {
 
   bool not_done = true;
   while (not_done) {
+    //processes variables
+    pid_t pid;
+    int status;
+
     char path[128];
     memset(path, 0, 128);
     strcat(path, dir_path);
@@ -77,7 +85,15 @@ int main(int argc, char *argv[]) {
 
     struct dirent* ent;
     
-    pid_t pid = fork();
+    while (active_processes >= MAX_PROC) {
+      // wait for a child process to finish before creating a new one
+      pid = waitpid(-1, &status, WNOHANG);
+      if (pid > 0) {
+        active_processes--;
+      }
+    }
+
+    pid = fork();
   
     if (pid == -1) {
       fprintf(stderr, "Failed to fork\n");
