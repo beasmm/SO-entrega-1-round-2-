@@ -93,20 +93,23 @@ int main(int argc, char *argv[]) {
       }
     }
 
-    pid = fork();
+    ent = readdir(dir);
+    
+    if (ent == NULL) {
+      not_done = false;
+    } else if (!strcmp(ent->d_name, ".") || !strcmp(ent->d_name, "..")) {
+      continue;
+    } else {  pid = fork(); }
+
   
     if (pid == -1) {
       fprintf(stderr, "Failed to fork\n");
       return 1;
     } else if (pid == 0) {
-      ent = readdir(dir);
-      
-      if (ent == NULL) {
-        not_done = false;
-        continue;
-      }
 
       strcat(path, ent->d_name);
+
+      printf("File path: %s, pid: %d\n", path, pid);
 
       int fp = open(path, O_RDONLY);
       if (fp == -1) {
@@ -205,13 +208,21 @@ int main(int argc, char *argv[]) {
 
           case EOC:
             eof = false;
+            exit(0);
             break;
         }
       }
-    } else {
-      wait(NULL);
+    } else if (pid > 0) {
+      active_processes++;
     }
   }
+  int p;
+  do {
+    p = wait(NULL);
+    printf("p: %d\n", p);
+  } while (p > 0);
+
+  // printf("Waiting for a process to finish...\n");
   ems_terminate();
   closedir(dir);
 }
