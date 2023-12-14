@@ -12,12 +12,15 @@
 
 //can this b here
 
+#include <sys/stat.h>
+
 
 #include "constants.h"
 #include "operations.h"
 #include "parser.h"
 
 #define PATH "jobs"
+
 
 int read_file_from_dir(DIR* dir, char* dir_path) {
     struct dirent* ent = readdir(dir);
@@ -38,7 +41,7 @@ int read_file_from_dir(DIR* dir, char* dir_path) {
     return fp;
 }
 
-void readCommandsFromFile (int fp) {
+void readCommandsFromFile (int fp, int fp_out) {
     unsigned int event_id, delay;
     size_t num_rows, num_columns, num_coords;
     size_t xs[MAX_RESERVATION_SIZE], ys[MAX_RESERVATION_SIZE];
@@ -78,7 +81,7 @@ void readCommandsFromFile (int fp) {
             continue;
           }
 
-          if (ems_show(event_id)) {
+          if (ems_show(event_id, fp_out)) {
             fprintf(stderr, "Failed to show event\n");
           }
 
@@ -167,6 +170,25 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
+  //new output directory NEWBEA
+  char *dir_path_out = "jobs_out";
+  struct stat st = {0};
+
+  //create output directory if it doesn't exist NEWBEA
+  if (stat(dir_path_out, &st) == -1) {
+    mkdir(dir_path_out, 0777);
+  }
+  DIR *dir_out = opendir(dir_path_out);
+  if (dir_out == NULL) {
+    fprintf(stderr, "Failed to open jobs_out directory\n");
+    return 1;
+  }
+  char path_out[128];
+  memset(path_out, 0, 128);
+  strcat(path_out, dir_path_out);
+  strcat(path_out, "/");
+
+
   bool not_done = true;
   while (not_done) {
     //processes variables
@@ -212,8 +234,20 @@ int main(int argc, char *argv[]) {
         return -1;
       }
 
-      readCommandsFromFile(fp);
+      //create new file name NEWBEA
+      strncat(path_out, ent->d_name, strlen(ent->d_name) - 5);
+      strcat(path_out, ".out");
+      printf("File out: %s, pid: %d\n", path_out, pid);
+      
+      int fp_out = open(path_out, O_CREAT | O_WRONLY | O_TRUNC, S_IRUSR | S_IWUSR);
+      if (fp_out == -1) {
+        fprintf(stderr, "Error creating .out file\n");
+        return -1;
+      }
 
+      readCommandsFromFile(fp, fp_out);
+
+      close(fp); close(fp_out);
 
       printf("> ");
       fflush(stdout);
@@ -231,4 +265,5 @@ int main(int argc, char *argv[]) {
   // printf("Waiting for a process to finish...\n");
   ems_terminate();
   closedir(dir);
+  closedir(dir_out);
 }

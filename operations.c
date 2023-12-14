@@ -2,6 +2,10 @@
 #include <stdlib.h>
 #include <time.h>
 
+//can this be here?
+#include <string.h>
+#include <unistd.h>
+
 #include "eventlist.h"
 
 static struct EventList* event_list = NULL;
@@ -156,7 +160,7 @@ int ems_reserve(unsigned int event_id, size_t num_seats, size_t* xs, size_t* ys)
   return 0;
 }
 
-int ems_show(unsigned int event_id) {
+int ems_show(unsigned int event_id, int fd) {
   if (event_list == NULL) {
     fprintf(stderr, "EMS state must be initialized\n");
     return 1;
@@ -172,14 +176,27 @@ int ems_show(unsigned int event_id) {
   for (size_t i = 1; i <= event->rows; i++) {
     for (size_t j = 1; j <= event->cols; j++) {
       unsigned int* seat = get_seat_with_delay(event, seat_index(event, i, j));
-      printf("%u", *seat);
+
+      char seat_char[sizeof(int)*8+1];
+      snprintf(seat_char, sizeof(seat_char), "%u", *seat);
+      size_t len = strlen(seat_char);
+      if(write(fd, seat_char, len) < 0) {
+        fprintf(stderr, "Error writing to file\n");
+        return 1;
+      }
 
       if (j < event->cols) {
-        printf(" ");
+        if(write(fd, " ", 1) < 0) {
+          fprintf(stderr, "Error writing to file\n");
+          return 1;
+        }
       }
     }
 
-    printf("\n");
+    if(write(fd, "\n", 1) < 0) {
+      fprintf(stderr, "Error writing to file\n");
+      return 1;
+    }
   }
 
   return 0;
