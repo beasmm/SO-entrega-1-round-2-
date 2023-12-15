@@ -103,7 +103,7 @@ void* processCommand (void* arg) {
       break;
 
     case CMD_LIST_EVENTS:
-      if (ems_list_events()) {
+      if (ems_list_events(fp_out)) {
         fprintf(stderr, "Failed to list events\n");
       }
 
@@ -119,14 +119,11 @@ void* processCommand (void* arg) {
 
       if (thread_id != 0) {
         pthread_t tid = pthread_self();
-        // printf("Thread self: %ld\n", tid);
         if (thread_id == tid) {
-          // printf("Waiting...%d\n", thread_id);
           ems_wait(delay);
         }
       } else {
         if (delay > 0) {
-          // printf("Waiting...\n");
           ems_wait(delay);
         }
       }
@@ -173,31 +170,37 @@ void readCommandsFromFile (int fp, int fp_out) {
   while (!fp_ptr[2]) {
 
     if (n_threads >= MAX_THREADS) {
+      printf("Waiting for: %d...\n", MAX_THREADS - i);
       pthread_join(tid[MAX_THREADS - i], NULL);
       n_threads--;
+      printf("n_threads: %d\n", n_threads);
     }
 
     pthread_create(&tid[i], NULL, processCommand, &fp_ptr);
     n_threads++;
-    if (fp_ptr[2] == 1) break;
-    //barrier
-    // if (fp_ptr[2] == 2) {
-    //   if (n_threads <= MAX_THREADS) {
-    //     for (int j = 0; j < n_threads; j++) {
-    //       pthread_join(tid[j], NULL);
-    //       n_threads = 0;
-    //     }
-    //   } else {
-    //     for (int j = 0; j < MAX_THREADS; j++) {
-    //       pthread_join(tid[j], NULL);
-    //       n_threads = 0;
-    //     }
-    //   }
-    //   i = 0;
-    // }
-    i = i % MAX_THREADS;
-    i++;
+    printf("n_threads: %d\n", n_threads);
+    if (fp_ptr[2] == 1) { break; }
 
+    //barrier
+    if (fp_ptr[2] == 2) {
+      printf("barrier\n");
+      if (n_threads < MAX_THREADS) {
+        for (int j = 0; j < n_threads; j++) {
+          pthread_join(tid[j], NULL);
+          n_threads = 0;
+        }
+      } else {
+        for (int j = 0; j < MAX_THREADS; j++) {
+          pthread_join(tid[j], NULL);
+          n_threads = 0;
+        }
+      }
+      i = 0;
+    } else {
+      i = i % MAX_THREADS;
+      i++;
+    }
+    printf("threads i: %d\n", i);
   }
 
   printf("n_threads: %d\n", n_threads);
@@ -261,7 +264,8 @@ int main(int argc, char *argv[]) {
   bool not_done = true;
   int i = 0;
   while (not_done) {
-    if (i == n_files) {
+    printf("process i: %d\n", i);
+    if (i >= n_files) {
       not_done = false;
       break;
     }
@@ -277,7 +281,6 @@ int main(int argc, char *argv[]) {
     memset(path_out, 0, sizeof(path_out));
     strncpy(path_out, path, strlen(path) - 5);
     strcat(path_out, ".out");
-    printf("path_out: %s\n", path_out);
 
     
     while (active_processes >= MAX_PROC) {
@@ -309,7 +312,6 @@ int main(int argc, char *argv[]) {
       //create new file name NEWBEA
       
       int fp_out = open(path_out, O_CREAT | O_WRONLY | O_TRUNC, S_IRUSR | S_IWUSR);
-      printf("fp_out: %d\n", fp_out);
       if (fp_out == -1) {
         fprintf(stderr, "Error creating .out file\n");
         return -1;
