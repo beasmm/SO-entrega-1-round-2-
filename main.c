@@ -115,18 +115,18 @@ void* processCommand (void* arg) {
         //continue;
       }
 
-      printf("Delay Thread ID: %d\n", thread_id);
+      // printf("Delay Thread ID: %d\n", thread_id);
 
       if (thread_id != 0) {
         pthread_t tid = pthread_self();
-        printf("Thread self: %ld\n", tid);
+        // printf("Thread self: %ld\n", tid);
         if (thread_id == tid) {
-          printf("Waiting...%d\n", thread_id);
+          // printf("Waiting...%d\n", thread_id);
           ems_wait(delay);
         }
       } else {
         if (delay > 0) {
-          printf("Waiting...\n");
+          // printf("Waiting...\n");
           ems_wait(delay);
         }
       }
@@ -150,13 +150,15 @@ void* processCommand (void* arg) {
       break;
 
     case CMD_BARRIER:  // Not implemented
-      // break;
+      // printf("BARRIER\n");
+      *eof = 2;
+      break;
     case CMD_EMPTY:
       break;
 
     case EOC:
       *eof = 1;
-      printf("EOF\n");
+      // printf("EOF\n");
       // exit(0);
       break;
   }
@@ -169,27 +171,46 @@ void readCommandsFromFile (int fp, int fp_out) {
   pthread_t tid[MAX_THREADS];
   int n_threads = 0;
 
-
   int i = 0;
   while (!fp_ptr[2]) {
 
     if (n_threads >= MAX_THREADS) {
-      pthread_join(tid[i], NULL);
+      pthread_join(tid[MAX_THREADS - i], NULL);
+      n_threads--;
     }
 
     pthread_create(&tid[i], NULL, processCommand, &fp_ptr);
-    i++;
     n_threads++;
+    if (fp_ptr[2] == 1) break;
+    if (fp_ptr[2] == 2) {
+      if (n_threads <= MAX_THREADS) {
+        for (int j = 0; j < n_threads; j++) {
+          pthread_join(tid[j], NULL);
+        }
+      } else {
+        for (int j = 0; j < MAX_THREADS; j++) {
+          pthread_join(tid[j], NULL);
+        }
+      }
+      break;
+    }
     i = i % MAX_THREADS;
+    i++;
     // printf("EOF %d\n", fp_ptr[2]);
 
   }
 
   printf("n_threads: %d\n", n_threads);
-  for (i = 0; i < MAX_THREADS; i++) {
-    pthread_join(tid[i], NULL);
+  
+  if (n_threads <= MAX_THREADS) {
+    for (int j = 0; j < i; j++) {
+      pthread_join(tid[j], NULL);
+    }
+  } else {
+    for (int j = 0; j < MAX_THREADS; j++) {
+      pthread_join(tid[j], NULL);
+    }
   }
-
 }
 
 int main(int argc, char *argv[]) {
@@ -209,7 +230,7 @@ int main(int argc, char *argv[]) {
 
   char dir_name[128];
   strncpy(dir_name, argv[1] + 2, sizeof(argv[1]) - 2);
-  printf("dir_name: %s\n", dir_name);
+  // printf("dir_name: %s\n", dir_name);
 
   int MAX_PROC = atoi(argv[2]);
   int active_processes = 0;
@@ -230,13 +251,21 @@ int main(int argc, char *argv[]) {
     fprintf(stderr, "Failed to open jobs directory\n");
     return 1;
   }
+
   int n_files = getListOfFiles(dir, dir_name, files);
+  printf("n_files: %d\n", n_files);
   for (int i = 0; i < n_files; i++) {
     printf("File: %s\n", files[i]);
   }
 
-
-  for (int i = 0; i < n_files; i++) {
+  bool not_done = true;
+  int i = 0;
+  while (not_done) {
+    if (i == n_files) {
+      not_done = false;
+      break;
+    }
+  
     //processes variables
     pid_t pid;
     int status;
@@ -265,12 +294,13 @@ int main(int argc, char *argv[]) {
     if (pid == -1) {
       fprintf(stderr, "Failed to fork\n");
       return 1;
+
     } else if (pid == 0) {
 
       printf("File path: %s, pid: %d\n", path, pid);
 
       int fp = open(path, O_RDONLY);
-     
+    
       if (fp == -1) {
         fprintf(stderr, "Failed to open jobs file\n");
         return -1;
@@ -289,11 +319,12 @@ int main(int argc, char *argv[]) {
 
       close(fp); 
       close(fp_out);
-
+      exit(0);
       printf("> ");
       fflush(stdout);
 
     } else if (pid > 0) {
+      i++;
       active_processes++;
     }
   }
