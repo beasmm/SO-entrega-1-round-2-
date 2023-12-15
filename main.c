@@ -23,6 +23,7 @@
 
 int MAX_THREADS;
 pthread_mutex_t cmd_lock = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t fp_lock = PTHREAD_MUTEX_INITIALIZER;
 
 
 int getListOfFiles(DIR *dir, char *dir_name, char *files[]){
@@ -50,7 +51,7 @@ int getListOfFiles(DIR *dir, char *dir_name, char *files[]){
 
 
 void* processCommand (void* arg) {
-  printf("Thread self: %ld\n", pthread_self());
+  // printf("Thread self: %ld\n", pthread_self());
   int* fp_ptr = (int*)arg;
 
   int fp = fp_ptr[0];
@@ -60,12 +61,14 @@ void* processCommand (void* arg) {
   unsigned int event_id, delay, thread_id;
   size_t num_rows, num_columns, num_coords;
   size_t xs[MAX_RESERVATION_SIZE], ys[MAX_RESERVATION_SIZE];
-
+  pthread_mutex_lock(&fp_lock);
   enum Command cmd = get_next(fp);
+  pthread_mutex_unlock(&fp_lock);
+
   pthread_mutex_lock(&cmd_lock); 
   switch (cmd) {
     case CMD_CREATE:
-      printf("create\n");
+      // printf("create\n");
       if (parse_create(fp, &event_id, &num_rows, &num_columns) != 0) {
         fprintf(stderr, "Invalid command. See HELP for usage\n");
         //continue;
@@ -78,7 +81,7 @@ void* processCommand (void* arg) {
       break;
 
     case CMD_RESERVE:
-      printf("reserve\n");
+      // printf("reserve\n");
       num_coords = parse_reserve(fp, MAX_RESERVATION_SIZE, &event_id, xs, ys);
 
       if (num_coords == 0) {
@@ -180,14 +183,13 @@ void readCommandsFromFile (int fp, int fp_out) {
 
     pthread_create(&tid[i], NULL, processCommand, &fp_ptr);
     n_threads++;
-    printf("n_threads: %d\n", n_threads);
+    // printf("n_threads: %d\n", n_threads);
     if (fp_ptr[2] == 1) { break; }
-
     //barrier
     if (fp_ptr[2] == 2) {
-      printf("barrier\n");
+      // printf("barrier\n");
       if (n_threads < MAX_THREADS) {
-        for (int j = 0; j < n_threads; j++) {
+        for (int j = 0; j < i; j++) {
           pthread_join(tid[j], NULL);
           n_threads = 0;
         }
@@ -202,10 +204,10 @@ void readCommandsFromFile (int fp, int fp_out) {
       i = i % MAX_THREADS;
       i++;
     }
-    printf("threads i: %d\n", i);
+    // printf("threads i: %d\n", i);
   }
 
-  printf("n_threads: %d\n", n_threads);
+  // printf("n_threads: %d\n", n_threads);
   
   if (n_threads < MAX_THREADS) {
     for (int j = 0; j < i; j++) {
@@ -258,7 +260,7 @@ int main(int argc, char *argv[]) {
   }
 
   int n_files = getListOfFiles(dir, dir_name, files);
-  printf("n_files: %d\n", n_files);
+  // printf("n_files: %d\n", n_files);
   for (int i = 0; i < n_files; i++) {
     printf("File: %s\n", files[i]);
   }
@@ -342,6 +344,7 @@ int main(int argc, char *argv[]) {
     free(files[k]);
   }
   // printf("Waiting for a process to finish...\n");
+  pthread_mutex_destroy(&cmd_lock);
   ems_terminate();
   closedir(dir);
   // closedir(dir_out);
