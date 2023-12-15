@@ -150,16 +150,14 @@ void* processCommand (void* arg) {
       break;
 
     case CMD_BARRIER:  // Not implemented
-      // printf("BARRIER\n");
       *eof = 2;
       break;
     case CMD_EMPTY:
+      *eof = 1;
       break;
 
     case EOC:
       *eof = 1;
-      // printf("EOF\n");
-      // exit(0);
       break;
   }
   pthread_mutex_unlock(&cmd_lock);
@@ -182,27 +180,29 @@ void readCommandsFromFile (int fp, int fp_out) {
     pthread_create(&tid[i], NULL, processCommand, &fp_ptr);
     n_threads++;
     if (fp_ptr[2] == 1) break;
-    if (fp_ptr[2] == 2) {
-      if (n_threads <= MAX_THREADS) {
-        for (int j = 0; j < n_threads; j++) {
-          pthread_join(tid[j], NULL);
-        }
-      } else {
-        for (int j = 0; j < MAX_THREADS; j++) {
-          pthread_join(tid[j], NULL);
-        }
-      }
-      break;
-    }
+    //barrier
+    // if (fp_ptr[2] == 2) {
+    //   if (n_threads <= MAX_THREADS) {
+    //     for (int j = 0; j < n_threads; j++) {
+    //       pthread_join(tid[j], NULL);
+    //       n_threads = 0;
+    //     }
+    //   } else {
+    //     for (int j = 0; j < MAX_THREADS; j++) {
+    //       pthread_join(tid[j], NULL);
+    //       n_threads = 0;
+    //     }
+    //   }
+    //   i = 0;
+    // }
     i = i % MAX_THREADS;
     i++;
-    // printf("EOF %d\n", fp_ptr[2]);
 
   }
 
   printf("n_threads: %d\n", n_threads);
   
-  if (n_threads <= MAX_THREADS) {
+  if (n_threads < MAX_THREADS) {
     for (int j = 0; j < i; j++) {
       pthread_join(tid[j], NULL);
     }
@@ -229,8 +229,8 @@ int main(int argc, char *argv[]) {
   }
 
   char dir_name[128];
+  memset(dir_name, 0, sizeof(dir_name));
   strncpy(dir_name, argv[1] + 2, sizeof(argv[1]) - 2);
-  // printf("dir_name: %s\n", dir_name);
 
   int MAX_PROC = atoi(argv[2]);
   int active_processes = 0;
@@ -288,7 +288,7 @@ int main(int argc, char *argv[]) {
       }
     }
 
-    printf("File out: %s, pid: %d\n", path_out, pid);
+    // printf("File out: %s, pid: %d\n", path_out, pid);
     pid = fork();
   
     if (pid == -1) {
@@ -319,9 +319,9 @@ int main(int argc, char *argv[]) {
 
       close(fp); 
       close(fp_out);
-      exit(0);
       printf("> ");
       fflush(stdout);
+      exit(0);
 
     } else if (pid > 0) {
       i++;
