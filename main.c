@@ -19,17 +19,18 @@
 #include "operations.h"
 #include "parser.h"
 
-#define PATH "jobs"
+
 
 int MAX_THREADS;
 pthread_mutex_t cmd_lock = PTHREAD_MUTEX_INITIALIZER;
 
 
-int getListOfFiles(DIR *dir, char *files[]){
+int getListOfFiles(DIR *dir, char *dir_name, char *files[]){
   char path[256];
   memset(path, 0, sizeof(path));
 
-  strcpy(path, "jobs/");
+  sprintf(path, "%s", dir_name);
+  strcat(path, "/");
 
   struct dirent *ent;
 
@@ -39,6 +40,9 @@ int getListOfFiles(DIR *dir, char *files[]){
       strcat(path, ent->d_name);
       files[count] = strdup(path);
       count++;
+      memset(path, 0, sizeof(path));
+      sprintf(path, "%s", dir_name);
+      strcat(path, "/");
     }
   }
   return count;
@@ -192,9 +196,9 @@ void readCommandsFromFile (int fp, int fp_out) {
 int main(int argc, char *argv[]) {
   unsigned int state_access_delay_ms = STATE_ACCESS_DELAY_MS;
 
-  if (argc > 1) {
+  if (argc > 2) {
     char *endptr;
-    unsigned long int delay = strtoul(argv[1], &endptr, 10);
+    unsigned long int delay = strtoul(argv[2], &endptr, 10);
 
     if (*endptr != '\0' || delay > UINT_MAX) {
       fprintf(stderr, "Invalid delay value or value too large\n");
@@ -204,11 +208,15 @@ int main(int argc, char *argv[]) {
     state_access_delay_ms = (unsigned int)delay;
   }
 
-  int MAX_PROC = atoi(argv[1]);
+  char dir_name[128];
+  strncpy(dir_name, argv[1] + 2, sizeof(argv[1]) - 2);
+  printf("dir_name: %s\n", dir_name);
+
+  int MAX_PROC = atoi(argv[2]);
   int active_processes = 0;
   
   //unused, flagged in compiler (is correct though)
-  MAX_THREADS = atoi(argv[2]); 
+  MAX_THREADS = atoi(argv[3]); 
   pthread_mutex_init(&cmd_lock, NULL);
 
   if (ems_init(state_access_delay_ms)) {
@@ -218,12 +226,15 @@ int main(int argc, char *argv[]) {
 
   
   char *files[128];
-  DIR *dir = opendir("jobs");
+  DIR *dir = opendir(dir_name);
   if (dir == NULL) {
     fprintf(stderr, "Failed to open jobs directory\n");
     return 1;
   }
-  int n_files = getListOfFiles(dir, files);
+  int n_files = getListOfFiles(dir, dir_name, files);
+  for (int i = 0; i < n_files; i++) {
+    printf("File: %s\n", files[i]);
+  }
 
 
   for (int i = 0; i < n_files; i++) {
@@ -235,8 +246,10 @@ int main(int argc, char *argv[]) {
     strcpy(path, files[i]);
 
     char path_out[128];
-    strncpy(path_out, path, strlen(path) - 4);
+    memset(path_out, 0, sizeof(path_out));
+    strncpy(path_out, path, strlen(path) - 5);
     strcat(path_out, ".out");
+    printf("path_out: %s\n", path_out);
 
     
     while (active_processes >= MAX_PROC) {
@@ -284,7 +297,6 @@ int main(int argc, char *argv[]) {
     } else if (pid > 0) {
       active_processes++;
     }
-    free(files[i]);
   }
   int p;
   do {
@@ -292,6 +304,9 @@ int main(int argc, char *argv[]) {
     // printf("p: %d\n", p);
   } while (p > 0);
 
+  for(int k = 0; k < n_files; k++) {
+    free(files[k]);
+  }
   // printf("Waiting for a process to finish...\n");
   ems_terminate();
   closedir(dir);
