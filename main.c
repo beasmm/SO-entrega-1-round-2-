@@ -65,6 +65,7 @@ void* processCommand (void* arg) {
   pthread_mutex_lock(&cmd_lock); 
   switch (cmd) {
     case CMD_CREATE:
+      printf("create\n");
       if (parse_create(fp, &event_id, &num_rows, &num_columns) != 0) {
         fprintf(stderr, "Invalid command. See HELP for usage\n");
         //continue;
@@ -77,6 +78,7 @@ void* processCommand (void* arg) {
       break;
 
     case CMD_RESERVE:
+      printf("reserve\n");
       num_coords = parse_reserve(fp, MAX_RESERVATION_SIZE, &event_id, xs, ys);
 
       if (num_coords == 0) {
@@ -103,6 +105,7 @@ void* processCommand (void* arg) {
       break;
 
     case CMD_LIST_EVENTS:
+      printf("list events\n");
       if (ems_list_events(fp_out)) {
         fprintf(stderr, "Failed to list events\n");
       }
@@ -150,7 +153,6 @@ void* processCommand (void* arg) {
       *eof = 2;
       break;
     case CMD_EMPTY:
-      *eof = 1;
       break;
 
     case EOC:
