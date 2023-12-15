@@ -179,7 +179,6 @@ void readCommandsFromFile (int fp, int fp_out) {
 
     pthread_create(&tid[i], NULL, processCommand, &fp_ptr);
     i++;
-    // if (n_threads < MAX_THREADS) 
     n_threads++;
     i = i % MAX_THREADS;
     // printf("EOF %d\n", fp_ptr[2]);
@@ -187,7 +186,7 @@ void readCommandsFromFile (int fp, int fp_out) {
   }
 
   printf("n_threads: %d\n", n_threads);
-  for (i = 0; i < n_threads; i++) {
+  for (i = 0; i < MAX_THREADS; i++) {
     pthread_join(tid[i], NULL);
   }
 
