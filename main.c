@@ -51,7 +51,6 @@ int getListOfFiles(DIR *dir, char *dir_name, char *files[]){
 
 
 void* processCommand (void* arg) {
-  // printf("Thread self: %ld\n", pthread_self());
   int* fp_ptr = (int*)arg;
 
   int fp = fp_ptr[0];
@@ -68,7 +67,6 @@ void* processCommand (void* arg) {
   pthread_mutex_lock(&cmd_lock); 
   switch (cmd) {
     case CMD_CREATE:
-      // printf("create\n");
       if (parse_create(fp, &event_id, &num_rows, &num_columns) != 0) {
         fprintf(stderr, "Invalid command. See HELP for usage\n");
         //continue;
@@ -81,7 +79,6 @@ void* processCommand (void* arg) {
       break;
 
     case CMD_RESERVE:
-      // printf("reserve\n");
       num_coords = parse_reserve(fp, MAX_RESERVATION_SIZE, &event_id, xs, ys);
 
       if (num_coords == 0) {
@@ -108,7 +105,6 @@ void* processCommand (void* arg) {
       break;
 
     case CMD_LIST_EVENTS:
-      printf("list events\n");
       if (ems_list_events(fp_out)) {
         fprintf(stderr, "Failed to list events\n");
       }
@@ -121,7 +117,6 @@ void* processCommand (void* arg) {
         //continue;
       }
 
-      // printf("Delay Thread ID: %d\n", thread_id);
 
       if (thread_id != 0) {
         pthread_t tid = pthread_self();
@@ -147,12 +142,12 @@ void* processCommand (void* arg) {
           "  SHOW <event_id>\n"
           "  LIST\n"
           "  WAIT <delay_ms> [thread_id]\n"  // thread_id is not implemented
-          "  BARRIER\n"                      // Not implemented
+          "  BARRIER\n"                      
           "  HELP\n");
 
       break;
 
-    case CMD_BARRIER:  // Not implemented
+    case CMD_BARRIER:
       *eof = 2;
       break;
     case CMD_EMPTY:
@@ -175,19 +170,16 @@ void readCommandsFromFile (int fp, int fp_out) {
   while (!fp_ptr[2]) {
 
     if (n_threads >= MAX_THREADS) {
-      printf("Waiting for: %d...\n", MAX_THREADS - i);
       pthread_join(tid[MAX_THREADS - i], NULL);
       n_threads--;
-      printf("n_threads: %d\n", n_threads);
     }
 
     pthread_create(&tid[i], NULL, processCommand, &fp_ptr);
     n_threads++;
-    // printf("n_threads: %d\n", n_threads);
+
     if (fp_ptr[2] == 1) { break; }
-    //barrier
+
     if (fp_ptr[2] == 2) {
-      // printf("barrier\n");
       if (n_threads < MAX_THREADS) {
         for (int j = 0; j < i; j++) {
           pthread_join(tid[j], NULL);
@@ -204,10 +196,7 @@ void readCommandsFromFile (int fp, int fp_out) {
       i = i % MAX_THREADS;
       i++;
     }
-    // printf("threads i: %d\n", i);
   }
-
-  // printf("n_threads: %d\n", n_threads);
   
   if (n_threads < MAX_THREADS) {
     for (int j = 0; j < i; j++) {
@@ -242,7 +231,6 @@ int main(int argc, char *argv[]) {
   int MAX_PROC = atoi(argv[2]);
   int active_processes = 0;
   
-  //unused, flagged in compiler (is correct though)
   MAX_THREADS = atoi(argv[3]); 
   pthread_mutex_init(&cmd_lock, NULL);
 
@@ -260,15 +248,10 @@ int main(int argc, char *argv[]) {
   }
 
   int n_files = getListOfFiles(dir, dir_name, files);
-  // printf("n_files: %d\n", n_files);
-  for (int i = 0; i < n_files; i++) {
-    printf("File: %s\n", files[i]);
-  }
 
   bool not_done = true;
   int i = 0;
   while (not_done) {
-    printf("process i: %d\n", i);
     if (i >= n_files) {
       not_done = false;
       break;
@@ -295,7 +278,6 @@ int main(int argc, char *argv[]) {
       }
     }
 
-    // printf("File out: %s, pid: %d\n", path_out, pid);
     pid = fork();
   
     if (pid == -1) {
@@ -303,8 +285,6 @@ int main(int argc, char *argv[]) {
       return 1;
 
     } else if (pid == 0) {
-
-      printf("File path: %s, pid: %d\n", path, pid);
 
       int fp = open(path, O_RDONLY);
     
@@ -325,7 +305,6 @@ int main(int argc, char *argv[]) {
 
       close(fp); 
       close(fp_out);
-      printf("> ");
       fflush(stdout);
       exit(0);
 
@@ -337,15 +316,11 @@ int main(int argc, char *argv[]) {
   int p;
   do {
     p = wait(NULL);
-    // printf("p: %d\n", p);
   } while (p > 0);
-
   for(int k = 0; k < n_files; k++) {
     free(files[k]);
   }
-  // printf("Waiting for a process to finish...\n");
   pthread_mutex_destroy(&cmd_lock);
   ems_terminate();
   closedir(dir);
-  // closedir(dir_out);
 }
