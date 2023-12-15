@@ -24,24 +24,26 @@
 int MAX_THREADS;
 pthread_mutex_t cmd_lock = PTHREAD_MUTEX_INITIALIZER;
 
-int read_file_from_dir(DIR* dir, char* dir_path) {
-    struct dirent* ent = readdir(dir);
-    char file_path[128];
-    memset(file_path, 0, 128);
 
-    if (ent == NULL) return -1;
+int getListOfFiles(DIR *dir, char *files[]){
+  char path[256];
+  memset(path, 0, sizeof(path));
 
-    strcat(file_path, dir_path);
-    strcat(file_path, "/");
-    strcat(file_path, ent->d_name);
+  strcpy(path, "jobs/");
 
-    int fp = open(file_path, O_RDONLY);
-    if (fp == -1) {
-      fprintf(stderr, "Failed to open jobs file\n");
-      return -1;
+  struct dirent *ent;
+
+  int count = 0;
+  while ((ent = readdir(dir)) != NULL) {
+    if (strstr(ent->d_name, ".jobs") != NULL) {
+      strcat(path, ent->d_name);
+      files[count] = strdup(path);
+      count++;
     }
-    return fp;
+  }
+  return count;
 }
+
 
 void* processCommand (void* arg) {
   printf("Thread self: %ld\n", pthread_self());
@@ -214,29 +216,28 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  char* dir_path = "jobs";
-  DIR *dir = opendir(dir_path);
+  
+  char *files[128];
+  DIR *dir = opendir("jobs");
   if (dir == NULL) {
     fprintf(stderr, "Failed to open jobs directory\n");
     return 1;
   }
+  int n_files = getListOfFiles(dir, files);
 
-  bool not_done = true;
-  while (not_done) {
+
+  for (int i = 0; i < n_files; i++) {
     //processes variables
     pid_t pid;
     int status;
 
     char path[128];
-    memset(path, 0, 128);
-    strcat(path, dir_path);
-    strcat(path, "/");
+    strcpy(path, files[i]);
 
     char path_out[128];
-    memset(path_out, 0, 128);
-    strcat(path_out, path);
+    strncpy(path_out, path, strlen(path) - 4);
+    strcat(path_out, ".out");
 
-    struct dirent* ent;
     
     while (active_processes >= MAX_PROC) {
       // wait for a child process to finish before creating a new one
@@ -246,29 +247,13 @@ int main(int argc, char *argv[]) {
       }
     }
 
-    
-    
-    if (ent == NULL) {
-      not_done = false;
-    } else if (!strcmp(ent->d_name, ".") || !strcmp(ent->d_name, "..")) {
-      continue;
-    } else {
-
-      if (ent->d_name == '.') {
-        continue;
-      }
-      strcat(path, ent->d_name);
-      strcat(path_out, strtok(ent->d_name, "."));
-      strcat(path_out, ".out");
-      printf("File out: %s, pid: %d\n", path_out, pid);
-      pid = fork();
-    }
+    printf("File out: %s, pid: %d\n", path_out, pid);
+    pid = fork();
   
     if (pid == -1) {
       fprintf(stderr, "Failed to fork\n");
       return 1;
     } else if (pid == 0) {
-
 
       printf("File path: %s, pid: %d\n", path, pid);
 
@@ -299,6 +284,7 @@ int main(int argc, char *argv[]) {
     } else if (pid > 0) {
       active_processes++;
     }
+    free(files[i]);
   }
   int p;
   do {
