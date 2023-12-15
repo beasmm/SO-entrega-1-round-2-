@@ -21,10 +21,8 @@
 
 #define PATH "jobs"
 
-int n_threads = 0;
 int MAX_THREADS;
-// pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-
+pthread_mutex_t cmd_lock = PTHREAD_MUTEX_INITIALIZER;
 
 int read_file_from_dir(DIR* dir, char* dir_path) {
     struct dirent* ent = readdir(dir);
@@ -46,16 +44,19 @@ int read_file_from_dir(DIR* dir, char* dir_path) {
 }
 
 void* processCommand (void* arg) {
+  printf("Thread self: %ld\n", pthread_self());
   int* fp_ptr = (int*)arg;
 
   int fp = fp_ptr[0];
   int fp_out = fp_ptr[1];
+  int *eof = &fp_ptr[2];
 
   unsigned int event_id, delay, thread_id;
   size_t num_rows, num_columns, num_coords;
   size_t xs[MAX_RESERVATION_SIZE], ys[MAX_RESERVATION_SIZE];
 
   enum Command cmd = get_next(fp);
+  pthread_mutex_lock(&cmd_lock); 
   switch (cmd) {
     case CMD_CREATE:
       if (parse_create(fp, &event_id, &num_rows, &num_columns) != 0) {
@@ -143,52 +144,46 @@ void* processCommand (void* arg) {
       break;
 
     case CMD_BARRIER:  // Not implemented
-      break;
+      // break;
     case CMD_EMPTY:
       break;
 
     case EOC:
-      // eof = false;
-      exit(0);
-      // return &cmd;
+      *eof = 1;
+      printf("EOF\n");
+      // exit(0);
       break;
   }
-  return NULL;
+  pthread_mutex_unlock(&cmd_lock);
+  pthread_exit(NULL);
 }
 
-// void* testThread(void* arg) {
-//   int* fp_ptr = (int*)arg;
-
-//   int fp = fp_ptr[0];
-//   int fp_out = fp_ptr[1];
-
-//   printf("fp :%d , fp_out:%d\n", fp, fp_out);
-
-//   return NULL;
-
-// }
-
 void readCommandsFromFile (int fp, int fp_out) {
-  int fp_ptr[2] = {fp, fp_out};
+  int fp_ptr[3] = {fp, fp_out, 0};
   pthread_t tid[MAX_THREADS];
+  int n_threads = 0;
 
-  while (1) {
-    int i = 0;
+
+  int i = 0;
+  while (!fp_ptr[2]) {
+
     if (n_threads >= MAX_THREADS) {
       pthread_join(tid[i], NULL);
-      i++;
-      n_threads--;
     }
 
-    pthread_create(&tid[n_threads], NULL, processCommand, &fp_ptr);
+    pthread_create(&tid[i], NULL, processCommand, &fp_ptr);
+    i++;
+    // if (n_threads < MAX_THREADS) 
     n_threads++;
+    i = i % MAX_THREADS;
+    // printf("EOF %d\n", fp_ptr[2]);
 
-    printf("n_threads: %d\n", n_threads);
-    for (i = 0; i < n_threads; i++) {
-      pthread_join(tid[i], NULL);
-    }
   }
-  
+
+  printf("n_threads: %d\n", n_threads);
+  for (i = 0; i < n_threads; i++) {
+    pthread_join(tid[i], NULL);
+  }
 
 }
 
@@ -212,7 +207,7 @@ int main(int argc, char *argv[]) {
   
   //unused, flagged in compiler (is correct though)
   MAX_THREADS = atoi(argv[2]); 
-
+  pthread_mutex_init(&cmd_lock, NULL);
 
   if (ems_init(state_access_delay_ms)) {
     fprintf(stderr, "Failed to initialize EMS\n");
@@ -226,26 +221,6 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  //new output directory NEWBEA
-  char *dir_path_out = "jobs_out";
-  struct stat st = {0};
-
-  //create output directory if it doesn't exist NEWBEA
-  if (stat(dir_path_out, &st) == -1) {
-    mkdir(dir_path_out, 0777);
-  }
-
-  DIR *dir_out = opendir(dir_path_out);
-  if (dir_out == NULL) {
-    fprintf(stderr, "Failed to open jobs_out directory\n");
-    return 1;
-  }
-  char path_out[128];
-  memset(path_out, 0, 128);
-  strcat(path_out, dir_path_out);
-  strcat(path_out, "/");
-
-
   bool not_done = true;
   while (not_done) {
     //processes variables
@@ -257,6 +232,10 @@ int main(int argc, char *argv[]) {
     strcat(path, dir_path);
     strcat(path, "/");
 
+    char path_out[128];
+    memset(path_out, 0, 128);
+    strcat(path_out, path);
+
     struct dirent* ent;
     
     while (active_processes >= MAX_PROC) {
@@ -267,35 +246,40 @@ int main(int argc, char *argv[]) {
       }
     }
 
-    ent = readdir(dir);
+    
     
     if (ent == NULL) {
       not_done = false;
     } else if (!strcmp(ent->d_name, ".") || !strcmp(ent->d_name, "..")) {
       continue;
-    } else {  pid = fork(); }
+    } else {
 
+      if (ent->d_name == '.') {
+        continue;
+      }
+      strcat(path, ent->d_name);
+      strcat(path_out, strtok(ent->d_name, "."));
+      strcat(path_out, ".out");
+      printf("File out: %s, pid: %d\n", path_out, pid);
+      pid = fork();
+    }
   
     if (pid == -1) {
       fprintf(stderr, "Failed to fork\n");
       return 1;
     } else if (pid == 0) {
 
-      strcat(path, ent->d_name);
 
       printf("File path: %s, pid: %d\n", path, pid);
 
       int fp = open(path, O_RDONLY);
-      printf("fp: %d\n", fp);
+     
       if (fp == -1) {
         fprintf(stderr, "Failed to open jobs file\n");
         return -1;
       }
 
       //create new file name NEWBEA
-      strncat(path_out, ent->d_name, strlen(ent->d_name) - 5);
-      strcat(path_out, ".out");
-      printf("File out: %s, pid: %d\n", path_out, pid);
       
       int fp_out = open(path_out, O_CREAT | O_WRONLY | O_TRUNC, S_IRUSR | S_IWUSR);
       printf("fp_out: %d\n", fp_out);
@@ -319,11 +303,11 @@ int main(int argc, char *argv[]) {
   int p;
   do {
     p = wait(NULL);
-    printf("p: %d\n", p);
+    // printf("p: %d\n", p);
   } while (p > 0);
 
   // printf("Waiting for a process to finish...\n");
   ems_terminate();
   closedir(dir);
-  closedir(dir_out);
+  // closedir(dir_out);
 }
