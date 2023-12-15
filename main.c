@@ -22,8 +22,11 @@
 
 
 int MAX_THREADS;
-pthread_mutex_t cmd_lock = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t fp_out_lock = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t fp_lock = PTHREAD_MUTEX_INITIALIZER;
+
+pthread_rwlock_t event_lock = PTHREAD_MUTEX_INITIALIZER;
+pthrea
 
 
 int getListOfFiles(DIR *dir, char *dir_name, char *files[]){
@@ -64,22 +67,28 @@ void* processCommand (void* arg) {
   enum Command cmd = get_next(fp);
   pthread_mutex_unlock(&fp_lock);
 
-  pthread_mutex_lock(&cmd_lock); 
   switch (cmd) {
     case CMD_CREATE:
+      pthread_mutex_lock(&event_lock);
+      pthread_mutex_lock(&fp_lock);
       if (parse_create(fp, &event_id, &num_rows, &num_columns) != 0) {
         fprintf(stderr, "Invalid command. See HELP for usage\n");
         //continue;
       }
+      pthread_mutex_unlock(&fp_lock);
 
       if (ems_create(event_id, num_rows, num_columns)) {
         fprintf(stderr, "Failed to create event\n");
       }
+      pthread_mutex_unlock(&event_lock);
 
       break;
 
     case CMD_RESERVE:
+      pthread_mutex_lock(&event_lock);
+      pthread_mutex_lock(&fp_lock);
       num_coords = parse_reserve(fp, MAX_RESERVATION_SIZE, &event_id, xs, ys);
+      pthread_mutex_unlock(&fp_lock);
 
       if (num_coords == 0) {
         fprintf(stderr, "Invalid command. See HELP for usage\n");
@@ -89,33 +98,45 @@ void* processCommand (void* arg) {
       if (ems_reserve(event_id, num_coords, xs, ys)) {
         fprintf(stderr, "Failed to reserve seats\n");
       }
+      pthread_mutex_unlock(&event_lock);
 
       break;
 
     case CMD_SHOW:
+      pthread_mutex_lock(&event_lock);
+      pthread_mutex_lock(&fp_lock);
       if (parse_show(fp, &event_id) != 0) {
         fprintf(stderr, "Invalid command. See HELP for usage\n");
         //continue;
       }
+      pthread_mutex_unlock(&fp_lock);
 
+
+      pthread_mutex_lock(&fp_out_lock);
       if (ems_show(event_id, fp_out)) {
         fprintf(stderr, "Failed to show event\n");
       }
+      pthread_mutex_unlock(&fp_out_lock);
+      pthread_mutex_unlock(&event_lock);
 
       break;
 
     case CMD_LIST_EVENTS:
+      pthread_mutex_lock(&fp_out_lock);
       if (ems_list_events(fp_out)) {
         fprintf(stderr, "Failed to list events\n");
       }
+      pthread_mutex_unlock(&fp_out_lock);
 
       break;
 
     case CMD_WAIT:
+      pthread_mutex_lock(&fp_lock);
       if (parse_wait(fp, &delay, &thread_id) == -1) {  // thread_id is not implemented
         fprintf(stderr, "Invalid command. See HELP for usage\n");
         //continue;
       }
+      pthread_mutex_unlock(&fp_lock);
 
 
       if (thread_id != 0) {
@@ -157,7 +178,6 @@ void* processCommand (void* arg) {
       *eof = 1;
       break;
   }
-  pthread_mutex_unlock(&cmd_lock);
   pthread_exit(NULL);
 }
 
@@ -232,7 +252,6 @@ int main(int argc, char *argv[]) {
   int active_processes = 0;
   
   MAX_THREADS = atoi(argv[3]); 
-  pthread_mutex_init(&cmd_lock, NULL);
 
   if (ems_init(state_access_delay_ms)) {
     fprintf(stderr, "Failed to initialize EMS\n");
@@ -320,7 +339,6 @@ int main(int argc, char *argv[]) {
   for(int k = 0; k < n_files; k++) {
     free(files[k]);
   }
-  pthread_mutex_destroy(&cmd_lock);
   ems_terminate();
   closedir(dir);
 }
